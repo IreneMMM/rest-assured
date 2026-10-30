@@ -1,81 +1,63 @@
 package org.example.tests;
 
-import io.restassured.response.Response;
-import org.example.client.Endpoints;
-import org.example.dto.AdminResponse;
-import org.example.dto.ApplicationResponse;
-import org.example.dto.ApplicationStatusResponse;
-import org.example.dto.UserResponse;
-import org.example.testdata.TestData;
+import org.example.api.Specifications;
+import org.example.data.ChangeStatusRequest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.notNullValue;
 
 public class ApplicationTest extends BaseTest {
 
 	@Test
 	void getApplications_containsCreatedApplication() {
-		int applicationId = createUser().applicationid;
+		int applicationId = createApplication();
 
-		Response response = api.get(Endpoints.GET_APPLICATIONS);
-
-		assertEquals(200, response.statusCode());
-		assertTrue(containsApplication(response, applicationId));
+		api.getApplications()
+				.spec(Specifications.okResponseSpec())
+				.body("data.size()", greaterThan(0))
+				.body("data.applicationid", hasItem(applicationId))
+				.body("data.applicationid", everyItem(notNullValue()))
+				.body("data.statusofapplication", everyItem(notNullValue()));
 	}
 
 	@Test
-	void getApplStatus_returnsCreatedApplication() {
-		UserResponse created = createUser();
+	void getApplStatus_createdApplication_returnsStatus() {
+		int applicationId = createApplication();
 
-		Response response = api.getWithParam(
-				Endpoints.GET_APPL_STATUS, "applicationId", created.applicationid);
-		ApplicationStatusResponse body = response.as(ApplicationStatusResponse.class);
+		api.getApplStatus(applicationId)
+				.spec(Specifications.okResponseSpec())
+				.body("data.statusofapplication", notNullValue())
+				.body("data.kindofapplication", notNullValue())
+				.body("data.dateofapplication", notNullValue());
+	}
 
-		assertEquals(200, response.statusCode());
-		assertEquals(created.applicantid, body.applicantid);
-		assertNotNull(body.statusofapplication);
+	@ParameterizedTest
+	@ValueSource(strings = {"0", "-1", "2147483647"})
+	void getApplStatus_unknownId_returnsNotFound(String applicationId) {
+		api.getApplStatus(applicationId)
+				.spec(Specifications.okResponseSpec())
+				.body("code", equalTo(404))
+				.body("message", equalTo("Application not found"));
 	}
 
 	@Test
-	void requestProcess_returnsUpdatedApplication() {
-		int applicationId = createUser().applicationid;
-		int staffId = createAdmin().staffid;
+	void requestProcess_approve_changesStatus() {
+		int applicationId = createApplication();
+		int staffId = createAdmin();
 
-		Response response = api.post(
-				Endpoints.REQUEST_PROCESS,
-				TestData.statusChange(applicationId, staffId));
-		ApplicationResponse body = response.as(ApplicationResponse.class);
+		api.requestProcess(new ChangeStatusRequest(applicationId, staffId, "approved"))
+				.spec(Specifications.okResponseSpec())
+				.body("data.applicationid", equalTo(applicationId))
+				.body("data.statusofapplication", equalTo("approved"));
 
-		assertEquals(200, response.statusCode());
-		assertEquals(Integer.valueOf(applicationId), body.applicationid);
-		assertEquals(Integer.valueOf(staffId), body.staffid);
-	}
-
-	private UserResponse createUser() {
-		String suffix = String.valueOf(System.currentTimeMillis());
-		Response response = api.post(Endpoints.SEND_USER_REQUEST, TestData.user(suffix));
-		assertEquals(200, response.statusCode());
-		return response.as(UserResponse.class);
-	}
-
-	private AdminResponse createAdmin() {
-		String suffix = String.valueOf(System.currentTimeMillis());
-		Response response = api.post(Endpoints.SEND_ADMIN_REQUEST, TestData.admin(suffix));
-		assertEquals(200, response.statusCode());
-		return response.as(AdminResponse.class);
-	}
-
-	private boolean containsApplication(Response response, int applicationId) {
-		String raw = response.asString().trim();
-		if (raw.startsWith("[")) {
-			List<ApplicationResponse> applications = response.jsonPath().getList("$", ApplicationResponse.class);
-			return applications.stream()
-					.anyMatch(item -> Integer.valueOf(applicationId).equals(item.applicationid));
-		}
-		return Integer.valueOf(applicationId).equals(response.as(ApplicationResponse.class).applicationid);
+		api.getApplStatus(applicationId)
+				.spec(Specifications.okResponseSpec())
+				.body("data.statusofapplication", equalTo("approved"));
 	}
 }
