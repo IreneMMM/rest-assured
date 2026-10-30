@@ -1,27 +1,40 @@
 package org.example.tests;
 
-import io.restassured.response.Response;
-import org.example.client.Endpoints;
-import org.example.dto.UserResponse;
-import org.example.testdata.TestData;
+import org.example.api.Specifications;
+import org.example.data.TestData;
+import org.example.data.UserRequest;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.notNullValue;
 
 public class UserTest extends BaseTest {
 
 	@Test
-	void sendUserRequest_returnsIds() {
-		String suffix = String.valueOf(System.currentTimeMillis());
+	void sendUserRequest_validData_returnsIds() {
+		api.sendUserRequest(TestData.validUser())
+				.spec(Specifications.okResponseSpec())
+				.body("data.applicationid", greaterThan(0))
+				.body("data.applicantid", greaterThan(0))
+				.body("data.citizenid", greaterThan(0))
+				.body("data.merrigecertificateid", notNullValue());
+	}
 
-		Response response = api.post(Endpoints.SEND_USER_REQUEST, TestData.user(suffix));
-		UserResponse body = response.as(UserResponse.class);
+	@Test
+	void sendUserRequest_withoutLastName_returnsClientError() {
+		UserRequest user = TestData.validUser();
+		user.personalLastName = null;
 
-		assertEquals(200, response.statusCode());
-		assertNotNull(body.applicantid);
-		assertNotNull(body.applicationid);
-		assertNotNull(body.citizenid);
-		assertNotNull(body.merrigecertificateid);
+		api.sendUserRequest(user)
+				.spec(Specifications.clientErrorResponseSpec());
+	}
+
+	@Test
+	void sendUserRequest_unknownMode_returnsClientError() {
+		UserRequest user = TestData.validUser();
+		user.mode = "unknown_mode";
+
+		api.sendUserRequest(user)
+				.spec(Specifications.clientErrorResponseSpec());
 	}
 }
