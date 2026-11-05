@@ -1,17 +1,24 @@
 package org.example.tests;
 
-import io.restassured.RestAssured;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import org.example.client.RequestProvider;
-import org.junit.jupiter.api.BeforeAll;
+import org.example.api.RequestProvider;
+import org.example.api.Specifications;
+import org.example.data.TestData;
 
 public abstract class BaseTest {
 
-	protected final RequestProvider api = new RequestProvider();
+	protected RequestProvider api = new RequestProvider();
 
-	@BeforeAll
-	static void setUp() {
-		RestAssured.replaceFiltersWith(new RequestLoggingFilter(), new ResponseLoggingFilter());
+	protected int createApplication() {
+		return api.sendUserRequest(TestData.validUser())
+				.spec(Specifications.okResponseSpec())
+				.extract()
+				.path("data.applicationid");
+	}
+
+	protected int createAdmin() {
+		return api.sendAdminRequest(TestData.validAdmin())
+				.spec(Specifications.okResponseSpec())
+				.extract()
+				.path("data.staffid");
 	}
 }
